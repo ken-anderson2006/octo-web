@@ -110,7 +110,7 @@ export function clearDocTarget(): void {
 }
 
 /** Read the persisted target, validating the shape. Returns null when absent/malformed. */
-function readDocTarget(): DocTarget | null {
+function readDocTarget(uid?: string): DocTarget | null {
   if (typeof window === 'undefined') return null
   try {
     const raw = window.sessionStorage.getItem(TARGET_STORAGE_KEY)
@@ -128,7 +128,7 @@ function readDocTarget(): DocTarget | null {
       docType:
         typeof parsed.docType === 'string' && parsed.docType
           ? parsed.docType
-          : isBoardIdLocally(parsed.doc)
+          : isBoardIdLocally(parsed.doc, uid)
             ? 'board'
             : undefined,
     }
@@ -150,8 +150,11 @@ function readDocTarget(): DocTarget | null {
  *
  * When none of these yields a doc this returns null and DocsHome renders the document list
  * instead (the backend exposes GET/POST /api/v1/docs for list/create).
+ *
+ * `uid` scopes the board-kind registry lookups (P2) so a shared browser never resolves a docId to
+ * a board using another user's local record; omitted (tests / boot before identity) → anon scope.
  */
-export function resolveDocTarget(search: string): DocTarget | null {
+export function resolveDocTarget(search: string, uid?: string): DocTarget | null {
   let space = DEFAULT_DOC_SPACE
   let folder = DEFAULT_DOC_FOLDER
   let queryDoc = ''
@@ -169,14 +172,14 @@ export function resolveDocTarget(search: string): DocTarget | null {
   //    single `?doc=` param (three-party-fixed), so the kind is resolved from the local board
   //    registry rather than a separate query param.
   if (queryDoc) {
-    const docType = isBoardIdLocally(queryDoc) ? 'board' : undefined
+    const docType = isBoardIdLocally(queryDoc, uid) ? 'board' : undefined
     const target: DocTarget = { space, folder, doc: queryDoc, docId: queryDoc, docType }
     persistDocTarget(target)
     return target
   }
 
   // 2. The host already wiped the query (or we navigated in-app): fall back to the mirror.
-  const persisted = readDocTarget()
+  const persisted = readDocTarget(uid)
   if (persisted) return persisted
 
   // 3. Deployment-configured default doc, if any.
@@ -259,12 +262,15 @@ function BoardRowIcon(): React.ReactElement {
 function DocsList({
   space,
   folder,
+  uid,
   selectedDocId,
   onSelect,
   reloadToken,
 }: {
   space: string
   folder: string
+  /** Authenticated uid — scopes the board-kind registry lookups/writes (P2). */
+  uid: string
   selectedDocId: string | null
   onSelect: (docId: string, docType?: string) => void
   reloadToken?: number
@@ -386,7 +392,7 @@ function DocsList({
         // deep-link re-opens the whiteboard even if the list response omits docType.
         docType,
       })
-      if (docType === 'board') rememberBoard(created.docId)
+      if (docType === 'board') rememberBoard(created.docId, uid)
       // New docs land in the list; select it inline (right pane opens, list stays).
       onSelect(created.docId, created.docType || docType)
       reload()
@@ -586,7 +592,7 @@ function DocsList({
             const active = d.docId === selectedDocId
             const hasTitle = !!d.title && d.title.trim().length > 0
             const label = hasTitle ? d.title : t('docs.state.untitled')
-            const board = isBoardDoc(d)
+            const board = isBoardDoc(d, uid)
             // Kind we can assert without a round-trip: a known board (API `docType==='board'` or
             // the creator's local registry, both via isBoardDoc), an explicit `'doc'`, or an
             // explicit `'sheet'` so a known spreadsheet row opens straight into SheetView. When the
@@ -760,7 +766,7 @@ export function DocsHome() {
   // Initial selection from URL deep-link / persisted target (so a shared `/docs?doc=` or a
   // refresh opens that doc in the right pane on first paint).
   const initialTarget = useRef(
-    resolveDocTarget(typeof window !== 'undefined' ? window.location.search : ''),
+    resolveDocTarget(typeof window !== 'undefined' ? window.location.search : '', uid),
   )
   // Kind we can assert for the initial target WITHOUT a round-trip: an explicit stored docType,
   // or a board surfaced by this client's local registry (the creator's own board). When the
@@ -1087,6 +1093,7 @@ export function DocsHome() {
         <DocsList
           space={space}
           folder={folder}
+          uid={uid}
           selectedDocId={selectedDocId}
           onSelect={openDoc}
           reloadToken={listReloadToken}
@@ -1101,6 +1108,7 @@ export function DocsHome() {
         <DocsList
           space={space}
           folder={folder}
+          uid={uid}
           selectedDocId={selectedDocId}
           onSelect={openDoc}
           reloadToken={listReloadToken}
