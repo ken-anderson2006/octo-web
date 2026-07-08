@@ -303,10 +303,11 @@ export function BoardShell(props: BoardShellProps): ReactElement {
     }
   }, [])
 
-  // De-brand the two mermaid surfaces Excalidraw 0.18.1 exposes no i18n/composition seam for — the
-  // "更多工具 → Mermaid 至 Excalidraw" menu item and the Mermaid dialog title/description (XIN-531
-  // items 3 & 4). Starts once the canvas is loaded; the observer covers both the in-canvas menu and
-  // the body-portal dialog. Disposed on unmount / re-import.
+  // Runtime de-brand of the Excalidraw 0.18.1 surfaces with no i18n/composition seam: the "更多工具
+  // → Mermaid 至 Excalidraw" menu item and the Mermaid dialog title/description (XIN-531 items 3 &
+  // 4), plus the online "浏览素材库 / Browse libraries" entry in the library panel (XIN-557; local
+  // import/export/add/reuse are preserved). Starts once the canvas is loaded; the observer covers
+  // both the in-canvas menu/panel and the body-portal dialog. Disposed on unmount / re-import.
   useEffect(() => {
     if (!Excalidraw || typeof document === 'undefined') return
     return installExcalidrawDebrand(document)
